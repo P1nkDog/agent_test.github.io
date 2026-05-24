@@ -37,8 +37,7 @@
 
 ### 方式2：在线演示
 直接访问我们的在线演示，无需下载：
-[👉 在线演示地址](https://yourname.github.io/frontend-debug-agent/)
-*(请替换为你自己的GitHub Pages地址)*
+[👉 在线演示地址](https://p1nkdog.github.io/agent_test/)
 
 ---
 
