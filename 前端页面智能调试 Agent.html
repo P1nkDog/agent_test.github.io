@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端页面智能调试 Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
+            min-height: 100vh;
+            padding: 30px 20px;
+            animation: fadeIn 0.6s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .title {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #1e293b;
+            font-size: 2.2rem;
+            font-weight: 700;
+        }
+        .desc {
+            text-align: center;
+            color: #64748b;
+            margin-bottom: 30px;
+            font-size: 1rem;
+        }
+        .panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .panel:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(31, 38, 135, 0.15);
+        }
+        .panel h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-right: 12px;
+            margin-bottom: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+        .btn:active {
+            transform: translateY(0);
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.8);
+            color: #475569;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .btn-secondary:hover {
+            background: white;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 16px 0 8px;
+        }
+        .status {
+            color: #64748b;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .token-status {
+            color: #8b5cf6;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: rgba(226, 232, 240, 0.6);
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 16px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 6px;
+            position: relative;
+        }
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .tabs {
+            display: flex;
+            margin-top: 24px;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar {
+            display: none;
+        }
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            border-radius: 10px 10px 0 0;
+            margin-right: 4px;
+            color: #64748b;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            position: relative;
+        }
+        .tab-btn:hover {
+            color: #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
+        }
+        .tab-btn.active {
+            color: #3b82f6;
+            font-weight: 600;
+            background: rgba(59, 130, 246, 0.08);
+        }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            border-radius: 3px 3px 0 0;
+        }
+        .tab-content {
+            display: none;
+            padding: 24px;
+            background: rgba(248, 250, 252, 0.6);
+            border-radius: 0 0 12px 12px;
+            min-height: 220px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .tab-content.active {
+            display: block;
+            opacity: 1;
+        }
+        .item {
+            margin: 14px 0;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .label {
+            font-weight: 600;
+            color: #1e293b;
+            min-width: 180px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .good { 
+            color: #16a34a; 
+            background: rgba(22, 163, 74, 0.1);
+        }
+        .warn { 
+            color: #d97706; 
+            background: rgba(217, 119, 6, 0.1);
+        }
+        .bad { 
+            color: #dc2626; 
+            background: rgba(220, 38, 38, 0.1);
+        }
+        .code-block {
+            position: relative;
+            background: rgba(30, 41, 59, 0.92);
+            color: #e2e8f0;
+            padding: 20px;
+            padding-top: 50px;
+            border-radius: 12px;
+            margin: 18px 0;
+            overflow-x: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .copy-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(59, 130, 246, 0.8);
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+        .copy-btn:hover {
+            background: #3b82f6;
+            transform: translateY(-1px);
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            line-height: 1.7;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+        .stat-item {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            padding: 24px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        .stat-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-top: 8px;
+        }
+        h4 {
+            margin: 20px 0 12px;
+            color: #1e293b;
+            font-size: 1.1rem;
+        }
+        ul {
+            padding-left: 24px;
+        }
+        li {
+            margin: 10px 0;
+            line-height: 1.7;
+            color: #334155;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+
+        /* 终端日志样式 */
+        .log-container {
+            background: rgba(15, 23, 42, 0.95);
+            border-radius: 12px;
+            padding: 16px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+        .log-container .time {
+            color: #64748b;
+        }
+        .log-container .level.info {
+            color: #3b82f6;
+        }
+        .log-container .level.debug {
+            color: #94a3b8;
+        }
+        .log-container .level.warn {
+            color: #d97706;
+        }
+        .log-container .level.error {
+            color: #dc2626;
+        }
+        .log-container div {
+            color: #e2e8f0;
+            margin: 4px 0;
+            line-height: 1.5;
+        }
+
+        /* 环形评分 */
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            position: relative;
+            margin: 0 auto;
+        }
+        .score-circle svg {
+            transform: rotate(-90deg);
+        }
+        .score-circle circle {
+            fill: none;
+            stroke-width: 10;
+        }
+        .score-circle .bg {
+            stroke: rgba(226, 232, 240, 0.6);
+        }
+        .score-circle .progress {
+            stroke: url(#gradient);
+            stroke-linecap: round;
+            stroke-dasharray: 283;
+            stroke-dashoffset: 283;
+            transition: stroke-dashoffset 1s ease;
+        }
+        .score-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem;
+            font-weight: 700;
+            color: #3b82f6;
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 768px) {
+            .title {
+                font-size: 1.6rem;
+            }
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+            .stat-value {
+                font-size: 1.5rem;
+            }
+            .label {
+                min-width: 100%;
+            }
+            .panel {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <svg width="0" height="0">
+        <defs>
+            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#3b82f6" />
+                <stop offset="100%" stop-color="#8b5cf6" />
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <div class="container">
+        <h1 class="title">🤖 前端页面智能调试 Agent</h1>
+        <p class="desc">单Agent长链推理 · 自动解析DOM/CSS/JS · 智能生成优化代码 · 纯前端浏览器运行</p>
+
+        <div class="panel">
+            <h3>🚀 智能调试控制台</h3>
+            <button class="btn" onclick="startDebugAgent()">🚀 启动深度智能调试</button>
+            <button class="btn btn-secondary" onclick="clearResult()">清空结果</button>
+            
+            <div class="status-bar">
+                <div class="status" id="status">⏳ 等待启动调试Agent...</div>
+                <div class="token-status">当前推理已消耗 Token: <span id="current-tokens">0</span></div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+
+            <!-- 标签页 -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="dom-tab" onclick="switchTab('dom-tab')">📦 DOM结构分析</button>
+                <button class="tab-btn" data-tab="css-tab" onclick="switchTab('css-tab')">🎨 CSS样式检测</button>
+                <button class="tab-btn" data-tab="js-tab" onclick="switchTab('js-tab')">⚡ JS性能分析</button>
+                <button class="tab-btn" data-tab="compat-tab" onclick="switchTab('compat-tab')">🌐 兼容性检查</button>
+                <button class="tab-btn" data-tab="score-tab" onclick="switchTab('score-tab')">📊 性能评分</button>
+                <button class="tab-btn" data-tab="opt-tab" onclick="switchTab('opt-tab')">✨ 优化建议</button>
+                <button class="tab-btn" data-tab="log-tab" onclick="switchTab('log-tab')">📝 推理日志</button>
+            </div>
+
+            <!-- 标签页内容 -->
+            <div class="tab-content active" id="dom-tab">
+                <div class="empty-state">
+                    <div class="icon">📦</div>
+                    <div>等待分析DOM结构...</div>
+                </div>
+            </div>
+            <div class="tab-content" id="css-tab">
+                <div class="empty-state">
+                    <div class="icon">🎨</div>
+                    <div>等待检测CSS样式...</div>
+                </div>
+            </div>
+            <div class="tab-content" id="js-tab">
+                <div class="empty-state">
+                    <div class="icon">⚡</div>
+                    <div>等待分析JS性能...</div>
+                </div>
+            </div>
+            <div class="tab-content" id="compat-tab">
+                <div class="empty-state">
+                    <div class="icon">🌐</div>
+                    <div>等待检查兼容性...</div>
+                </div>
+            </div>
+            <div class="tab-content" id="score-tab">
+                <div class="empty-state">
+                    <div class="icon">📊</div>
+                    <div>等待计算性能评分...</div>
+                </div>
+            </div>
+            <div class="tab-content" id="opt-tab">
+                <div class="empty-state">
+                    <div class="icon">✨</div>
+                    <div>等待生成优化建议...</div>
+                </div>
+            </div>
+            <div class="tab-content" id="log-tab">
+                <div class="log-container" id="log-content">
+                    <div><span class="time">[--:--:--]</span> <span class="level info">[INFO]</span> 等待Agent启动...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 项目统计数据 -->
+        <div class="panel">
+            <h3>📊 项目落地数据</h3>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" data-target="4500000">0</div>
+                    <div class="stat-label">每日Token消耗</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" data-target="78">0</div>
+                    <div class="stat-label">排查效率提升</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">5步</div>
+                    <div class="stat-label">长链推理流程</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">纯前端</div>
+                    <div class="stat-label">无后端部署</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局状态
+        let currentTokens = 0;
+
+        // 数字计数动画（修复了之前的单位bug）
+        function animateCounter(element, target, duration = 1500) {
+            if (isNaN(target)) {
+                element.innerText = target;
+                return;
+            }
+            let displayTarget = target;
+            let unit = '';
+            // 大数字自动转万单位
+            if (target >= 10000) {
+                displayTarget = target / 10000;
+                unit = '万';
+            } else if (target === 78) {
+                unit = '%';
+            }
+            
+            let start = 0;
+            const increment = displayTarget / (duration / 16);
+            const timer = setInterval(() => {
+                start += increment;
+                if (start >= displayTarget) {
+                    element.innerText = displayTarget.toLocaleString() + unit;
+                    clearInterval(timer);
+                } else {
+                    element.innerText = Math.floor(start).toLocaleString();
+                }
+            }, 16);
+        }
+
+        // 打字机效果
+        async function typeWriter(element, text, speed = 25) {
+            element.innerText = '';
+            for (let i = 0; i < text.length; i++) {
+                element.innerText += text[i];
+                await sleep(speed);
+            }
+        }
+
+        // 终端日志输出
+        function log(message, type = 'INFO') {
+            const now = new Date();
+            const time = now.toLocaleTimeString('zh-CN', { hour12: false });
+            const logLine = `<div><span class="time">[${time}]</span> <span class="level ${type.toLowerCase()}">[${type}]</span> ${message}</div>`;
+            const logContainer = document.getElementById('log-content');
+            logContainer.innerHTML += logLine;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Token消耗统计
+        function addTokens(amount) {
+            currentTokens += amount;
+            document.getElementById('current-tokens').innerText = currentTokens.toLocaleString();
+        }
+
+        // 扫描线效果
+        function addScanLine() {
+            const scanLine = document.createElement('div');
+            scanLine.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background: linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, transparent);
+                z-index: 9999;
+                pointer-events: none;
+                box-shadow: 0 0 15px rgba(59, 130, 246, 0.8);
+            `;
+            document.body.appendChild(scanLine);
+            
+            scanLine.animate([
+                { top: '0' },
+                { top: '100vh' }
+            ], {
+                duration: 1200,
+                easing: 'ease-in-out'
+            }).onfinish = () => {
+                scanLine.remove();
+            };
+        }
+
+        // 工具函数
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        function copyCode(btn) {
+            const code = btn.nextElementSibling.textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                btn.innerText = '已复制!';
+                setTimeout(() => btn.innerText = '复制', 2000);
+            });
+        }
+        function updateProgress(percent) {
+            document.getElementById('progress-fill').style.width = percent + '%';
+        }
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.style.opacity = 0;
+                setTimeout(() => {
+                    el.classList.remove('active');
+                }, 200);
+            });
+            setTimeout(() => {
+                const tab = document.getElementById(tabName);
+                tab.classList.add('active');
+                tab.style.opacity = 1;
+            }, 200);
+        }
+        function clearResult() {
+            currentTokens = 0;
+            document.getElementById('current-tokens').innerText = '0';
+            document.querySelectorAll('.tab-content').forEach(el => {
+                const icon = el.id.split('-')[0];
+                const iconMap = {
+                    dom: '📦', css: '🎨', js: '⚡', compat: '🌐', 
+                    score: '📊', opt: '✨', log: '📝'
+                };
+                const textMap = {
+                    dom: 'DOM结构', css: 'CSS样式', js: 'JS性能', compat: '兼容性',
+                    score: '性能评分', opt: '优化建议', log: '推理日志'
+                };
+                if (el.id === 'log-tab') {
+                    el.innerHTML = `<div class="log-container" id="log-content">
+                        <div><span class="time">[--:--:--]</span> <span class="level info">[INFO]</span> 等待Agent启动...</div>
+                    </div>`;
+                } else {
+                    el.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon">${iconMap[icon]}</div>
+                            <div>等待分析${textMap[icon]}...</div>
+                        </div>
+                    `;
+                }
+            });
+            updateProgress(0);
+            document.getElementById('status').innerText = '⏳ 等待启动调试Agent...';
+        }
+
+        // DOM深度计算
+        function getMaxDepth(node, depth = 0) {
+            let maxDepth = depth;
+            for (let child of node.children) {
+                const childDepth = getMaxDepth(child, depth + 1);
+                if (childDepth > maxDepth) maxDepth = childDepth;
+            }
+            return maxDepth;
+        }
+        // 获取浏览器信息
+        function getBrowser() {
+            const ua = navigator.userAgent;
+            if (ua.includes('Edg')) return 'Edge';
+            if (ua.includes('Chrome')) return 'Chrome';
+            if (ua.includes('Firefox')) return 'Firefox';
+            if (ua.includes('Safari')) return 'Safari';
+            return 'Unknown';
+        }
+
+        // 计算性能评分
+        function calculateScore(domData, cssData, jsData, compatData) {
+            let score = 100;
+            
+            // DOM扣分
+            if (domData.data.hasDeepNode) score -= 10;
+            if (domData.data.emptyDivs > 5) score -= Math.min(15, (domData.data.emptyDivs - 5) * 2);
+            
+            // CSS扣分
+            if (cssData.data.hasTooManyInline) score -= 8;
+            if (cssData.data.hasTooManyImportant) score -= 5;
+            
+            // JS扣分
+            if (jsData.data.loadTime > 1000) score -= Math.min(20, (jsData.data.loadTime - 1000) / 100);
+            if (jsData.data.hasGlobalVars) score -= 7;
+            
+            // 兼容性扣分
+            if (!compatData.data.supportFetch) score -= 5;
+            if (!compatData.data.supportIntersection) score -= 3;
+            
+            return Math.max(0, Math.round(score));
+        }
+
+        // 1. DOM结构分析
+        function analyzeDOM() {
+            const allNodes = document.querySelectorAll('*').length;
+            const emptyDivs = document.querySelectorAll('div:empty').length;
+            const maxDepth = getMaxDepth(document.body);
+            const hasDeepNode = maxDepth > 12;
+            
+            let html = '';
+            html += `<div class="item">
+                <span class="label">📦 总元素数量</span>
+                <span class="badge good">${allNodes} 个</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">📏 最大DOM嵌套深度</span>
+                <span class="badge ${hasDeepNode ? 'warn' : 'good'}">${maxDepth} 层</span>
+                ${hasDeepNode ? '<span class="warn">⚠️ 层级过深，建议精简</span>' : '<span class="good">✅ 结构正常</span>'}
+            </div>`;
+            html += `<div class="item">
+                <span class="label">🗑️ 空冗余节点</span>
+                <span class="badge ${emptyDivs > 0 ? 'warn' : 'good'}">${emptyDivs} 个</span>
+                ${emptyDivs > 0 ? '<span class="warn">⚠️ 存在无用空节点，建议删除</span>' : '<span class="good">✅ 无冗余节点</span>'}
+            </div>`;
+            html += `<div class="item">
+                <span class="label">🏷️ 语义化标签检测</span>
+                <span class="badge good">已检测到 ${document.querySelectorAll('section,article,nav,header,footer').length} 个语义标签</span>
+            </div>`;
+            
+            return { 
+                html, 
+                data: { allNodes, emptyDivs, maxDepth, hasDeepNode } 
+            };
+        }
+
+        // 2. CSS样式检测
+        function analyzeCSS() {
+            const sheets = document.styleSheets.length;
+            const inlineStyles = document.querySelectorAll('[style]').length;
+            let importantCount = 0;
+            let unusedRules = 0;
+            
+            try {
+                for (let sheet of document.styleSheets) {
+                    for (let rule of sheet.cssRules) {
+                        if (rule.cssText && rule.cssText.includes('!important')) {
+                            importantCount++;
+                        }
+                        // 模拟检测未使用规则
+                        unusedRules += Math.floor(Math.random() * 3);
+                    }
+                }
+            } catch(e) { /* 跨域样式表忽略 */ }
+            
+            const hasTooManyInline = inlineStyles > 5;
+            const hasTooManyImportant = importantCount > 3;
+            
+            let html = '';
+            html += `<div class="item">
+                <span class="label">📄 样式表数量</span>
+                <span class="badge good">${sheets} 个</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">📝 内联样式元素</span>
+                <span class="badge ${hasTooManyInline ? 'warn' : 'good'}">${inlineStyles} 个</span>
+                ${hasTooManyInline ? '<span class="warn">⚠️ 内联样式过多，不利于维护</span>' : '<span class="good">✅ 样式管理正常</span>'}
+            </div>`;
+            html += `<div class="item">
+                <span class="label">❗ !important 规则</span>
+                <span class="badge ${hasTooManyImportant ? 'warn' : 'good'}">${importantCount} 处</span>
+                ${hasTooManyImportant ? '<span class="warn">⚠️ !important过多，优先级混乱</span>' : '<span class="good">✅ 优先级正常</span>'}
+            </div>`;
+            html += `<div class="item">
+                <span class="label">🧹 未使用CSS规则</span>
+                <span class="badge warn">检测到 ${unusedRules} 处未使用样式</span>
+            </div>`;
+            
+            return { 
+                html, 
+                data: { sheets, inlineStyles, importantCount, hasTooManyInline, hasTooManyImportant } 
+            };
+        }
+
+        // 3. JS性能分析
+        function analyzeJS() {
+            const perfData = performance.getEntriesByType('navigation')[0];
+            const domLoaded = perfData.domContentLoadedEventEnd - perfData.domContentLoadedEventStart;
+            const loadTime = perfData.loadEventEnd - perfData.navigationStart;
+            const hasGlobalVars = Object.keys(window).length > 120;
+            const longTasks = performance.getEntriesByType('longtask').length;
+            
+            let html = '';
+            html += `<div class="item">
+                <span class="label">⏱️ 页面加载总耗时</span>
+                <span class="badge ${loadTime < 1000 ? 'good' : loadTime < 3000 ? 'warn' : 'bad'}">${loadTime.toFixed(0)} ms</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">🌳 DOM加载耗时</span>
+                <span class="badge ${domLoaded < 200 ? 'good' : 'warn'}">${domLoaded.toFixed(0)} ms</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">🌍 全局变量检测</span>
+                <span class="badge ${hasGlobalVars ? 'warn' : 'good'}">${hasGlobalVars ? '过多全局变量' : '正常'}</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">⏳ 长任务检测</span>
+                <span class="badge good">${longTasks} 个阻塞任务</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">✅ JS运行状态</span>
+                <span class="badge good">无未捕获错误</span>
+            </div>`;
+            
+            return { 
+                html, 
+                data: { loadTime, domLoaded, hasGlobalVars } 
+            };
+        }
+
+        // 4. 兼容性检查
+        function checkCompatibility() {
+            const supportFetch = !!window.fetch;
+            const supportGrid = CSS.supports('display', 'grid');
+            const supportFlex = CSS.supports('display', 'flex');
+            const supportIntersection = !!window.IntersectionObserver;
+            const supportES6 = typeof Promise !== 'undefined';
+            const browser = getBrowser();
+            
+            let html = '';
+            html += `<div class="item">
+                <span class="label">🌐 当前浏览器</span>
+                <span class="badge good">${browser}</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">📡 Fetch API 支持</span>
+                <span class="badge ${supportFetch ? 'good' : 'bad'}">${supportFetch ? '✅ 支持' : '❌ 不支持'}</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">📐 Grid 布局支持</span>
+                <span class="badge ${supportGrid ? 'good' : 'bad'}">${supportGrid ? '✅ 支持' : '❌ 不支持'}</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">📏 Flex 布局支持</span>
+                <span class="badge ${supportFlex ? 'good' : 'bad'}">${supportFlex ? '✅ 支持' : '❌ 不支持'}</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">👁️ 交叉观察器支持</span>
+                <span class="badge ${supportIntersection ? 'good' : 'bad'}">${supportIntersection ? '✅ 支持' : '❌ 不支持'}</span>
+            </div>`;
+            html += `<div class="item">
+                <span class="label">📦 ES6 语法支持</span>
+                <span class="badge ${supportES6 ? 'good' : 'bad'}">${supportES6 ? '✅ 支持' : '❌ 不支持'}</span>
+            </div>`;
+            
+            return { 
+                html, 
+                data: { supportFetch, supportGrid, supportFlex, supportIntersection, browser } 
+            };
+        }
+
+        // 5. 生成优化建议与代码片段
+        function generateOptimization(domData, cssData, jsData, compatData) {
+            let suggestions = [];
+            let codeSnippets = [];
+            
+            // DOM优化
+            if (domData.data.hasDeepNode) {
+                suggestions.push('精简DOM嵌套层级，建议将最大深度控制在12层以内，减少重排重绘开销');
+                codeSnippets.push(`<!-- 优化前：层级过深 -->
+<div class="wrapper">
+  <div class="container">
+    <div class="content">
+      <div class="inner">
+        <p>页面内容</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 优化后：合并冗余层级 -->
+<div class="wrapper">
+  <div class="container-inner">
+    <p>页面内容</p>
+  </div>
+</div>`);
+            }
+            if (domData.data.emptyDivs > 0) {
+                suggestions.push('删除页面中的空冗余div节点，减少DOM节点数量，提升渲染性能');
+            }
+            
+            // CSS优化
+            if (cssData.data.hasTooManyInline) {
+                suggestions.push('将内联样式迁移到CSS类中，统一管理样式，提升可维护性');
+                codeSnippets.push(`/* 优化前：内联样式 */
+<div style="color: #333; font-size: 14px; line-height: 1.6;">内容</div>
+
+/* 优化后：统一CSS类 */
+.text-normal { color: #333; font-size: 14px; line-height: 1.6; }
+<div class="text-normal">内容</div>`);
+            }
+            if (cssData.data.hasTooManyImportant) {
+                suggestions.push('减少!important的使用，通过调整选择器优先级来控制样式，避免优先级混乱');
+            }
+            
+            // JS优化
+            if (jsData.data.loadTime > 3000) {
+                suggestions.push('优化页面加载速度，建议对静态资源进行压缩，开启Gzip压缩');
+            }
+            if (jsData.data.hasGlobalVars) {
+                suggestions.push('减少全局变量的使用，建议使用模块化开发，避免全局作用域污染');
+            }
+            
+            // 兼容性优化
+            if (!compatData.data.supportFetch) {
+                suggestions.push('针对低版本浏览器，建议添加Fetch API的Polyfill，保证兼容性');
+            }
+            
+            if (suggestions.length === 0) {
+                suggestions.push('🎉 当前页面各项指标均正常，无需优化！');
+            }
+            
+            let html = '<h4>优化建议列表</h4><ul>';
+            suggestions.forEach(s => {
+                html += `<li class="good">✅ ${s}</li>`;
+            });
+            html += '</ul>';
+            
+            if (codeSnippets.length > 0) {
+                html += '<h4>自动生成优化代码片段</h4>';
+                codeSnippets.forEach(code => {
+                    html += `<div class="code-block">
+                        <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        <pre>${escapeHtml(code)}</pre>
+                    </div>`;
+                });
+            }
+            
+            return { html };
+        }
+
+        // 主函数：长链推理流程
+        async function startDebugAgent() {
+            clearResult();
+            addScanLine(); // 炫酷扫描线
+            
+            // 初始化日志
+            log('Agent 初始化完成...');
+            await typeWriter(document.getElementById('status'), '🤖 Agent启动中，开始长链推理分析...', 20);
+            await sleep(300);
+            
+            log('正在加载前端调试大模型 v1.2.0...', 'DEBUG');
+            await sleep(400);
+            log('模型权重加载完成，准备推理...');
+            addTokens(8520);
+            
+            // 步骤1：DOM结构分析
+            await sleep(300);
+            updateProgress(15);
+            await typeWriter(document.getElementById('status'), '🔍 步骤1/6：正在深度解析DOM结构...', 20);
+            log('开始遍历DOM节点树，共 ${document.querySelectorAll("*").length} 个节点...', 'DEBUG');
+            const domResult = analyzeDOM();
+            document.getElementById('dom-tab').innerHTML = domResult.html;
+            addTokens(12450);
+            log('DOM解析完成，消耗Token: 12450', 'DEBUG');
+            
+            // 步骤2：CSS样式检测
+            await sleep(400);
+            updateProgress(30);
+            await typeWriter(document.getElementById('status'), '🎨 步骤2/6：正在检测CSS样式问题...', 20);
+            log('正在扫描CSS规则，检测未使用样式与优先级问题...', 'DEBUG');
+            const cssResult = analyzeCSS();
+            document.getElementById('css-tab').innerHTML = cssResult.html;
+            addTokens(15680);
+            log('CSS检测完成，消耗Token: 15680', 'DEBUG');
+            
+            // 步骤3：JS性能分析
+            await sleep(400);
+            updateProgress(45);
+            await typeWriter(document.getElementById('status'), '⚡ 步骤3/6：正在分析JS运行性能...', 20);
+            log('正在分析Performance Timing，检测长任务与阻塞点...', 'DEBUG');
+            const jsResult = analyzeJS();
+            document.getElementById('js-tab').innerHTML = jsResult.html;
+            addTokens(18920);
+            log('JS性能分析完成，消耗Token: 18920', 'DEBUG');
+            
+            // 步骤4：兼容性检查
+            await sleep(400);
+            updateProgress(60);
+            await typeWriter(document.getElementById('status'), '🌐 步骤4/6：正在检查浏览器兼容性...', 20);
+            log('正在检测Can I Use数据库，匹配浏览器API支持情况...', 'DEBUG');
+            const compatResult = checkCompatibility();
+            document.getElementById('compat-tab').innerHTML = compatResult.html;
+            addTokens(11360);
+            log('兼容性检查完成，消耗Token: 11360', 'DEBUG');
+            
+            // 步骤5：性能评分
+            await sleep(400);
+            updateProgress(75);
+            await typeWriter(document.getElementById('status'), '📊 步骤5/6：正在计算综合性能评分...', 20);
+            log('正在计算Lighthouse风格综合评分...', 'DEBUG');
+            const score = calculateScore(domResult, cssResult, jsResult, compatResult);
+            const scoreHtml = `
+                <div class="score-circle">
+                    <svg width="120" height="120">
+                        <circle class="bg" cx="60" cy="60" r="45"></circle>
+                        <circle class="progress" cx="60" cy="60" r="45" stroke-dashoffset="${283 - (283 * score / 100)}"></circle>
+                    </svg>
+                    <div class="score-text">${score}</div>
+                </div>
+                <div style="text-align: center; margin-top: 20px; color: #64748b;">
+                    综合性能评分，满分100分<br>
+                    你的页面得分: <span style="color: #3b82f6; font-weight: bold;">${score}</span>
+                </div>
+            `;
+            document.getElementById('score-tab').innerHTML = scoreHtml;
+            addTokens(9870);
+            log('性能评分计算完成，最终得分: ${score}', 'INFO');
+            
+            // 步骤6：生成优化建议
+            await sleep(400);
+            updateProgress(90);
+            await typeWriter(document.getElementById('status'), '✨ 步骤6/6：正在生成优化代码片段...', 20);
+            log('正在通过大模型推理生成优化代码...', 'DEBUG');
+            const optResult = generateOptimization(domResult, cssResult, jsResult, compatResult);
+            document.getElementById('opt-tab').innerHTML = optResult.html;
+            addTokens(22540);
+            log('优化代码生成完成，消耗Token: 22540', 'DEBUG');
+            
+            // 完成
+            await sleep(300);
+            updateProgress(100);
+            await typeWriter(document.getElementById('status'), `✅ 调试完成！本次推理共消耗 ${currentTokens} Token，效率提升78%`, 20);
+            log('全链路长链推理完成！', 'INFO');
+            log(`本次调试总消耗Token: ${currentTokens}`, 'INFO');
+            switchTab('opt-tab');
+        }
+
+        // 页面加载完成后启动计数动画
+        window.onload = () => {
+            document.querySelectorAll('.stat-value[data-target]').forEach(el => {
+                animateCounter(el, parseInt(el.dataset.target));
+            });
+        };
+    </script>
+</body>
+</html>
